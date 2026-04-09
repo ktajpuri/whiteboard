@@ -51,8 +51,9 @@ Auth flow: Google OAuth and local login both issue a JWT in an httpOnly cookie (
   - `historyStore` — undo/redo stacks per slide (50 actions deep)
 - `api/` — Axios client (`api/client.js`) with offline queue; `auth.js`, `decks.js`, `slides.js` wrappers
 - `canvas/WhiteboardCanvas.jsx` — react-konva Stage; all tool event handling lives here
-- `canvas/elements/` — `ShapeElement`, `StrokeElement`, `TextElement` Konva renderers
-- `components/` — `Toolbar`, `SlidePanel`, `PropertiesPanel`, `ColorPicker`, `AuthModal`, `ExportModal`
+- `canvas/elements/` — `ShapeElement`, `StrokeElement`, `TextElement`, `ImageElement` Konva renderers
+- `components/` — `Toolbar`, `SlidePanel`, `PropertiesPanel`, `ColorPicker`, `AuthModal`, `ExportModal`, `CropModal`
+- `utils/imageUtils.js` — `readAndResizeImage(file, maxSide=1920)` → `{ dataURL, naturalWidth, naturalHeight }`
 - `hooks/useAutoSave.js` — 30-second autosave to localStorage (guest) or server (logged in)
 
 ### Data model
@@ -67,6 +68,11 @@ Element types:
 { id, type: 'stroke', points: number[], color, lineWidth, specVersion }
 // Text
 { id, type: 'text', x, y, width, text, fontSize, fontStyle, color, specVersion }
+// Image (non-destructive crop)
+{ id, type: 'image', x, y, width, height, rotation, src, naturalWidth, naturalHeight,
+  cropX?, cropY?, cropWidth?, cropHeight?, specVersion }
+// cropX/Y/Width/Height are in source pixels; omitting them shows the full image.
+// Konva renders via the `crop` prop: the crop rect is stretched to fill width×height.
 ```
 
 ### Canvas coordinate system
@@ -80,6 +86,8 @@ The canvas is 4000×3000px. The Konva `Stage` is positioned at `(panX, panY)` an
 - Slides stored as JSONB blobs — no separate `elements` table
 - Guest data lives entirely in Zustand's localStorage persistence; on login the user is prompted to keep or discard it
 - Export (PNG/PDF) is done client-side; only JSON export is uploaded to R2
+- Images are stored as base64 data URLs inside the slide JSONB blob — no separate upload endpoint
+- Crop is non-destructive: `cropX/Y/Width/Height` in source pixels, display `width/height` independent
 - Socket.io is not wired in v1 but the server is structured to support it later
 
 ## Environment
