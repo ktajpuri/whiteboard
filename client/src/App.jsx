@@ -4,7 +4,7 @@ import { useSlidesStore } from './store/slidesStore'
 import { useCanvasStore } from './store/canvasStore'
 import { getMe, logout } from './api/auth'
 import { createDeck, listDecks } from './api/decks'
-import { getSlides, createSlide } from './api/slides'
+import { getSlides, createSlide, updateSlide } from './api/slides'
 import { useAutoSave } from './hooks/useAutoSave'
 import WhiteboardCanvas from './canvas/WhiteboardCanvas'
 import Toolbar from './components/Toolbar'
@@ -16,7 +16,6 @@ import ExportModal from './components/ExportModal'
 export default function App() {
   const [showAuth, setShowAuth] = useState(false)
   const [showExport, setShowExport] = useState(false)
-  const [showImport] = useState(false)
   const [deckId, setDeckId] = useState(null)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const containerRef = useRef()
@@ -28,14 +27,12 @@ export default function App() {
 
   useAutoSave(deckId)
 
-  // Resize canvas on window resize
   useEffect(() => {
     const onResize = () => setCanvasSize({ width: window.innerWidth - 220, height: window.innerHeight - 56 })
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // Online/offline indicator
   useEffect(() => {
     const on = () => setIsOnline(true)
     const off = () => setIsOnline(false)
@@ -44,29 +41,37 @@ export default function App() {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
   }, [])
 
-  // Init: check auth + load slides
   useEffect(() => {
     init()
     getMe()
       .then(({ user }) => {
         setUser(user)
-        return loadOrCreateDeck(user)
+        return loadOrCreateDeck()
       })
       .catch(() => {}) // guest mode
   }, [])
 
-  async function loadOrCreateDeck(user) {
+  async function loadOrCreateDeck() {
     try {
       const decks = await listDecks()
       let deck = decks[0]
       if (!deck) deck = await createDeck('My Whiteboard')
       setDeckId(deck.id)
+
       const serverSlides = await getSlides(deck.id)
+      const localSlides = useSlidesStore.getState().slides
+      const localHasContent = localSlides.length > 1 || localSlides.some(s => s.elements.length > 0)
+
       if (serverSlides.length === 0) {
-        await createSlide(deck.id, { label: 'Slide 1', elements: [] })
-        const fresh = await getSlides(deck.id)
-        setSlides(fresh.map(normalizeSlide))
-      } else {
+        const created = []
+        for (const slide of localSlides) {
+          const s = await createSlide(deck.id, { label: slide.label, elements: slide.elements })
+          created.push(normalizeSlide(s))
+        }
+        setSlides(created)
+      } else if (!localHasContent) {
+        setSlides(serverSlides.map(normalizeSlide))
+      } else if (serverSlides.length >= localSlides.length) {
         setSlides(serverSlides.map(normalizeSlide))
       }
     } catch (err) {
@@ -104,7 +109,13 @@ export default function App() {
 
   return (
     <div className="app">
-      <Toolbar onExport={() => setShowExport(true)} onImport={handleImport} />
+      <Toolbar
+        onExport={() => setShowExport(true)}
+        onImport={handleImport}
+        user={user}
+        onSignIn={() => setShowAuth(true)}
+        onSignOut={handleLogout}
+      />
 
       <div className="app-body">
         <SlidePanel />
@@ -116,20 +127,8 @@ export default function App() {
         {selectedIds.length > 0 && <PropertiesPanel />}
       </div>
 
-      {/* Auth bar */}
-      <div className="auth-bar">
-        {user ? (
-          <>
-            <span className="user-name">{user.display_name || user.email}</span>
-            <button onClick={handleLogout} className="link-btn">Sign out</button>
-          </>
-        ) : (
-          <button onClick={() => setShowAuth(true)} className="link-btn">Sign in to sync</button>
-        )}
-      </div>
-
       {!isOnline && (
-        <div className="offline-banner">You're offline — changes saved locally</div>
+        <div className="offline-banner">You're offline — changes are saved locally</div>
       )}
 
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}

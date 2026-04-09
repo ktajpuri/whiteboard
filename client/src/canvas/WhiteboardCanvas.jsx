@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect } from 'react'
 import { Stage, Layer, Rect, Transformer } from 'react-konva'
 import { v4 as uuidv4 } from 'uuid'
 import { useCanvasStore } from '../store/canvasStore'
@@ -11,7 +11,6 @@ import TextElement from './elements/TextElement'
 const CANVAS_W = 4000
 const CANVAS_H = 3000
 const PEN_SIZES = { S: 2, M: 4, L: 8, XL: 16 }
-const ERASER_SIZES = { S: 10, M: 20, L: 40, XL: 80 }
 const SHAPE_TOOLS = ['rect', 'ellipse', 'triangle', 'hexagon']
 
 export default function WhiteboardCanvas({ width, height }) {
@@ -22,61 +21,91 @@ export default function WhiteboardCanvas({ width, height }) {
   const shapeStart = useRef(null)
   const clipboard = useRef([])
 
+  // Read tool state via refs so event handlers never go stale
+  const toolRef = useRef('select')
+  const penSizeRef = useRef('M')
+  const eraserSizeRef = useRef('M')
+  const activeColorRef = useRef('#000000')
+  const zoomRef = useRef(1)
+  const panXRef = useRef(0)
+  const panYRef = useRef(0)
+  const selectedIdsRef = useRef([])
+  const editingTextIdRef = useRef(null)
+
   const {
     activeTool, penSize, eraserSize, activeColor,
     zoom, panX, panY, selectedIds, editingTextId,
     setZoom, setPan, setSelected, clearSelection, addToSelection, setEditingText
   } = useCanvasStore()
 
-  const { getActiveSlide, updateSlideElements, activeSlideId } = useSlidesStore()
+  // Keep refs in sync with React state
+  useEffect(() => { toolRef.current = activeTool }, [activeTool])
+  useEffect(() => { penSizeRef.current = penSize }, [penSize])
+  useEffect(() => { eraserSizeRef.current = eraserSize }, [eraserSize])
+  useEffect(() => { activeColorRef.current = activeColor }, [activeColor])
+  useEffect(() => { zoomRef.current = zoom }, [zoom])
+  useEffect(() => { panXRef.current = panX }, [panX])
+  useEffect(() => { panYRef.current = panY }, [panY])
+  useEffect(() => { selectedIdsRef.current = selectedIds }, [selectedIds])
+  useEffect(() => { editingTextIdRef.current = editingTextId }, [editingTextId])
+
+  const { updateSlideElements } = useSlidesStore()
   const { push: pushHistory, undo, redo } = useHistoryStore()
 
-  const slide = getActiveSlide()
+  // Always read fresh elements directly from Zustand — fixes stale closure bugs
+  const getElements = () => useSlidesStore.getState().getActiveSlide()?.elements || []
+  const getSlideId = () => useSlidesStore.getState().activeSlideId
+
+  const commit = (newElements) => {
+    const slideId = getSlideId()
+    if (!slideId) return
+    pushHistory(slideId, getElements())
+    updateSlideElements(slideId, newElements)
+  }
+
+  const updateLive = (newElements) => {
+    const slideId = getSlideId()
+    if (!slideId) return
+    updateSlideElements(slideId, newElements)
+  }
+
+  // Sync Transformer nodes whenever selection or elements change
+  const slide = useSlidesStore(s => s.getActiveSlide())
   const elements = slide?.elements || []
 
-  const commit = useCallback((newElements) => {
-    if (!activeSlideId) return
-    pushHistory(activeSlideId, elements)
-    updateSlideElements(activeSlideId, newElements)
-  }, [activeSlideId, elements, pushHistory, updateSlideElements])
-
-  const updateLive = useCallback((newElements) => {
-    if (!activeSlideId) return
-    updateSlideElements(activeSlideId, newElements)
-  }, [activeSlideId, updateSlideElements])
-
-  // Sync Transformer with selection
   useEffect(() => {
     if (!trRef.current || !stageRef.current) return
-    const stage = stageRef.current
-    const nodes = selectedIds.map(id => stage.findOne(`#${id}`)).filter(Boolean)
+    const nodes = selectedIds.map(id => stageRef.current.findOne(`#${id}`)).filter(Boolean)
     trRef.current.nodes(nodes)
     trRef.current.getLayer()?.batchDraw()
   }, [selectedIds, elements])
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — read fresh state from Zustand/refs
   useEffect(() => {
     const onKey = (e) => {
       if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return
       const mod = e.metaKey || e.ctrlKey
+      const ids = selectedIdsRef.current
+      const els = getElements()
+      const slideId = getSlideId()
 
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.length) {
-        commit(elements.filter(el => !selectedIds.includes(el.id)))
+      if ((e.key === 'Delete' || e.key === 'Backspace') && ids.length) {
+        commit(els.filter(el => !ids.includes(el.id)))
         clearSelection()
         return
       }
       if (mod && e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
-        const prev = undo(activeSlideId, elements)
-        if (prev !== null) updateSlideElements(activeSlideId, prev)
+        const prev = undo(slideId, els)
+        if (prev !== null) updateSlideElements(slideId, prev)
       }
       if (mod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
         e.preventDefault()
-        const next = redo(activeSlideId, elements)
-        if (next !== null) updateSlideElements(activeSlideId, next)
+        const next = redo(slideId, els)
+        if (next !== null) updateSlideElements(slideId, next)
       }
       if (mod && e.key === 'c') {
-        clipboard.current = elements.filter(el => selectedIds.includes(el.id))
+        clipboard.current = els.filter(el => ids.includes(el.id))
       }
       if (mod && e.key === 'v' && clipboard.current.length) {
         const pasted = clipboard.current.map(el => ({
@@ -84,149 +113,148 @@ export default function WhiteboardCanvas({ width, height }) {
           x: (el.x || 0) + 20,
           y: (el.y || 0) + 20
         }))
-        commit([...elements, ...pasted])
+        commit([...els, ...pasted])
         setSelected(pasted.map(p => p.id))
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedIds, elements, activeSlideId])
+  }, []) // no deps — reads fresh state via refs/getState()
 
-  // Wheel: zoom + pan
+  const getCanvasPos = () => {
+    const pos = stageRef.current.getPointerPosition()
+    return {
+      x: (pos.x - panXRef.current) / zoomRef.current,
+      y: (pos.y - panYRef.current) / zoomRef.current
+    }
+  }
+
   const handleWheel = (e) => {
     e.evt.preventDefault()
     const stage = stageRef.current
-    const oldZoom = zoom
+    const oldZoom = zoomRef.current
     const pointer = stage.getPointerPosition()
 
     if (e.evt.ctrlKey || e.evt.metaKey) {
       const factor = e.evt.deltaY < 0 ? 1.1 : 0.9
       const newZoom = Math.min(5, Math.max(0.1, oldZoom * factor))
-      const mousePointTo = { x: (pointer.x - panX) / oldZoom, y: (pointer.y - panY) / oldZoom }
+      const mousePointTo = {
+        x: (pointer.x - panXRef.current) / oldZoom,
+        y: (pointer.y - panYRef.current) / oldZoom
+      }
       setZoom(newZoom)
       setPan(pointer.x - mousePointTo.x * newZoom, pointer.y - mousePointTo.y * newZoom)
     } else {
-      setPan(panX - e.evt.deltaX, panY - e.evt.deltaY)
+      setPan(panXRef.current - e.evt.deltaX, panYRef.current - e.evt.deltaY)
     }
-  }
-
-  const getCanvasPos = () => {
-    const pos = stageRef.current.getPointerPosition()
-    return { x: (pos.x - panX) / zoom, y: (pos.y - panY) / zoom }
   }
 
   const handleMouseDown = (e) => {
+    if (e.evt.button === 1) return
+    isPointerDown.current = true
+    const tool = toolRef.current
     const target = e.target
     const stage = stageRef.current
-    isPointerDown.current = true
-
-    // Middle-click or space+drag: pan (handled via CSS cursor + wheel)
-    if (e.evt.button === 1) return
-
     const pos = getCanvasPos()
+    const els = getElements()
 
-    if (activeTool === 'select') {
-      if (target === stage || target.name() === 'background') {
-        clearSelection()
-      }
+    if (tool === 'select') {
+      if (target === stage || target.name() === 'background') clearSelection()
       return
     }
 
-    if (activeTool === 'pen') {
+    if (tool === 'pen') {
       const id = uuidv4()
       drawingId.current = id
-      const newStroke = {
+      updateLive([...els, {
         id, type: 'stroke', specVersion: '1.0',
         points: [pos.x, pos.y],
-        color: activeColor,
-        lineWidth: PEN_SIZES[penSize] || 4
-      }
-      updateLive([...elements, newStroke])
+        color: activeColorRef.current,
+        lineWidth: PEN_SIZES[penSizeRef.current] || 4
+      }])
       return
     }
 
-    if (activeTool === 'eraser') {
+    if (tool === 'eraser') {
       const hit = stage.getIntersection(stage.getPointerPosition())
-      if (hit && hit.id() && hit.name() !== 'background') {
-        commit(elements.filter(el => el.id !== hit.id()))
+      if (hit?.id() && hit.name() !== 'background') {
+        commit(els.filter(el => el.id !== hit.id()))
       }
       return
     }
 
-    if (activeTool === 'text') {
+    if (tool === 'text') {
       const hit = stage.getIntersection(stage.getPointerPosition())
-      if (hit && hit.id() && elements.find(el => el.id === hit.id() && el.type === 'text')) {
+      if (hit?.id() && els.find(el => el.id === hit.id() && el.type === 'text')) {
         setEditingText(hit.id())
         return
       }
       const id = uuidv4()
-      const newText = {
+      commit([...els, {
         id, type: 'text', specVersion: '1.0',
         x: pos.x, y: pos.y, width: 200,
-        text: '', fontSize: 16, fontStyle: 'normal', color: activeColor
-      }
-      commit([...elements, newText])
+        text: '', fontSize: 16, fontStyle: 'normal', color: activeColorRef.current
+      }])
       setEditingText(id)
       return
     }
 
-    if (activeTool === 'bucket') {
+    if (tool === 'bucket') {
       const hit = stage.getIntersection(stage.getPointerPosition())
-      if (hit && hit.id()) {
-        commit(elements.map(el => el.id === hit.id() ? { ...el, fill: activeColor } : el))
+      if (hit?.id()) {
+        commit(els.map(el => el.id === hit.id() ? { ...el, fill: activeColorRef.current } : el))
       }
       return
     }
 
-    if (SHAPE_TOOLS.includes(activeTool)) {
+    if (SHAPE_TOOLS.includes(tool)) {
       shapeStart.current = pos
       const id = uuidv4()
       drawingId.current = id
-      const newShape = {
-        id, type: activeTool, specVersion: '1.0',
+      updateLive([...els, {
+        id, type: tool, specVersion: '1.0',
         x: pos.x, y: pos.y, width: 0, height: 0,
-        rotation: 0, fill: 'transparent', stroke: activeColor, strokeWidth: 2
-      }
-      updateLive([...elements, newShape])
+        rotation: 0, fill: 'transparent',
+        stroke: activeColorRef.current, strokeWidth: 2
+      }])
     }
   }
 
-  const handleMouseMove = (e) => {
+  const handleMouseMove = () => {
     if (!isPointerDown.current) return
+    const tool = toolRef.current
     const pos = getCanvasPos()
 
-    if (activeTool === 'pen' && drawingId.current) {
-      updateLive(elements.map(el => el.id === drawingId.current
-        ? { ...el, points: [...el.points, pos.x, pos.y] }
-        : el
+    if (tool === 'pen' && drawingId.current) {
+      // Read fresh elements every call — avoids stale closure losing points
+      const els = getElements()
+      updateLive(els.map(el =>
+        el.id === drawingId.current
+          ? { ...el, points: [...el.points, pos.x, pos.y] }
+          : el
       ))
       return
     }
 
-    if (activeTool === 'eraser') {
-      const stage = stageRef.current
-      const hit = stage.getIntersection(stage.getPointerPosition())
-      if (hit && hit.id() && hit.name() !== 'background') {
-        const eraserSize_ = ERASER_SIZES[eraserSize] || 20
-        // simple proximity erase: remove element whose center is within eraser radius
-        commit(elements.filter(el => {
-          if (el.id !== hit.id()) return true
-          return false
-        }))
+    if (tool === 'eraser') {
+      const hit = stageRef.current.getIntersection(stageRef.current.getPointerPosition())
+      if (hit?.id() && hit.name() !== 'background') {
+        commit(getElements().filter(el => el.id !== hit.id()))
       }
       return
     }
 
-    if (SHAPE_TOOLS.includes(activeTool) && shapeStart.current && drawingId.current) {
+    if (SHAPE_TOOLS.includes(tool) && shapeStart.current && drawingId.current) {
       const dx = pos.x - shapeStart.current.x
       const dy = pos.y - shapeStart.current.y
       const w = Math.abs(dx)
       const h = Math.abs(dy)
       const x = dx >= 0 ? shapeStart.current.x : pos.x
       const y = dy >= 0 ? shapeStart.current.y : pos.y
-      updateLive(elements.map(el => el.id === drawingId.current
-        ? { ...el, x, y, width: w, height: h }
-        : el
+      // Read fresh elements to avoid overwriting with stale state
+      const els = getElements()
+      updateLive(els.map(el =>
+        el.id === drawingId.current ? { ...el, x, y, width: w, height: h } : el
       ))
     }
   }
@@ -234,20 +262,22 @@ export default function WhiteboardCanvas({ width, height }) {
   const handleMouseUp = () => {
     if (!isPointerDown.current) return
     isPointerDown.current = false
+    const tool = toolRef.current
+    const els = getElements()
 
-    if (activeTool === 'pen' && drawingId.current) {
-      const stroke = elements.find(el => el.id === drawingId.current)
-      if (stroke) commit([...elements.filter(el => el.id !== stroke.id), stroke])
+    if (tool === 'pen' && drawingId.current) {
+      const stroke = els.find(el => el.id === drawingId.current)
+      if (stroke) commit(els) // finalize current state as history checkpoint
       drawingId.current = null
       return
     }
 
-    if (SHAPE_TOOLS.includes(activeTool) && drawingId.current) {
-      const shape = elements.find(el => el.id === drawingId.current)
+    if (SHAPE_TOOLS.includes(tool) && drawingId.current) {
+      const shape = els.find(el => el.id === drawingId.current)
       if (shape && shape.width < 5 && shape.height < 5) {
-        updateLive(elements.filter(el => el.id !== drawingId.current))
+        updateLive(els.filter(el => el.id !== drawingId.current))
       } else if (shape) {
-        commit(elements)
+        commit(els)
       }
       drawingId.current = null
       shapeStart.current = null
@@ -255,22 +285,24 @@ export default function WhiteboardCanvas({ width, height }) {
   }
 
   const handleElementClick = (e) => {
-    if (activeTool !== 'select') return
+    if (toolRef.current !== 'select') return
     const id = e.target.id()
-    if (e.evt.shiftKey) {
-      addToSelection(id)
-    } else {
-      setSelected([id])
-    }
+    if (e.evt.shiftKey) addToSelection(id)
+    else setSelected([id])
   }
 
   const handleDragEnd = (e) => {
-    const id = e.target.id()
     const node = e.target
-    commit(elements.map(el => el.id === id
-      ? { ...el, x: node.x(), y: node.y() }
-      : el
-    ))
+    const id = node.id()
+    const els = getElements()
+    commit(els.map(el => {
+      if (el.id !== id) return el
+      // Ellipse node.x/y is center — convert back to top-left
+      if (el.type === 'ellipse') {
+        return { ...el, x: node.x() - el.width / 2, y: node.y() - el.height / 2 }
+      }
+      return { ...el, x: node.x(), y: node.y() }
+    }))
   }
 
   const handleTransformEnd = (e) => {
@@ -280,24 +312,21 @@ export default function WhiteboardCanvas({ width, height }) {
     const scaleY = node.scaleY()
     node.scaleX(1)
     node.scaleY(1)
-    commit(elements.map(el => {
+    const els = getElements()
+    commit(els.map(el => {
       if (el.id !== id) return el
-      if (el.type === 'stroke') {
-        return { ...el, x: node.x(), y: node.y(), rotation: node.rotation() }
-      }
-      return {
-        ...el,
-        x: node.x(),
-        y: node.y(),
-        width: Math.max(5, (el.width || 0) * scaleX),
-        height: Math.max(5, (el.height || 0) * scaleY),
-        rotation: node.rotation()
-      }
+      const newWidth = Math.max(5, (el.width || 0) * scaleX)
+      const newHeight = Math.max(5, (el.height || 0) * scaleY)
+      // Ellipse: node.x/y is center, convert to top-left
+      const newX = el.type === 'ellipse' ? node.x() - newWidth / 2 : node.x()
+      const newY = el.type === 'ellipse' ? node.y() - newHeight / 2 : node.y()
+      return { ...el, x: newX, y: newY, width: newWidth, height: newHeight, rotation: node.rotation() }
     }))
   }
 
   const handleTextChange = (id, text) => {
-    commit(elements.map(el => el.id === id ? { ...el, text } : el))
+    const els = getElements()
+    commit(els.map(el => el.id === id ? { ...el, text } : el))
     setEditingText(null)
   }
 
@@ -319,7 +348,6 @@ export default function WhiteboardCanvas({ width, height }) {
       style={{ cursor: activeTool === 'pen' ? 'crosshair' : activeTool === 'eraser' ? 'cell' : 'default' }}
     >
       <Layer>
-        {/* Canvas background */}
         <Rect
           name="background"
           x={0} y={0}
@@ -330,7 +358,6 @@ export default function WhiteboardCanvas({ width, height }) {
           shadowOffset={{ x: 2, y: 2 }}
         />
 
-        {/* Elements */}
         {elements.map(el => {
           if (el.type === 'stroke') {
             return (

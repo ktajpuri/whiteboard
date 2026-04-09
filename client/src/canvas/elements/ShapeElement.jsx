@@ -31,6 +31,7 @@ export default function ShapeElement({ element, draggable, onClick, onDragEnd, o
     return <Rect {...common} width={element.width} height={element.height} />
   }
   if (element.type === 'ellipse') {
+    // Konva Ellipse x/y is center — offset from our stored top-left
     return (
       <Ellipse
         {...common}
@@ -38,6 +39,8 @@ export default function ShapeElement({ element, draggable, onClick, onDragEnd, o
         y={element.y + element.height / 2}
         radiusX={element.width / 2}
         radiusY={element.height / 2}
+        offsetX={0}
+        offsetY={0}
       />
     )
   }

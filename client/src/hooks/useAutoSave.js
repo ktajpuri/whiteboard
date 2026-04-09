@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useSlidesStore } from '../store/slidesStore'
-import { updateSlide } from '../api/slides'
+import { updateSlide, createSlide } from '../api/slides'
 
 const INTERVAL = 30_000
 
@@ -11,7 +11,6 @@ export function useAutoSave(deckId) {
   const slidesRef = useRef(slides)
   const dirtyRef = useRef(false)
 
-  // Track when slides change
   useEffect(() => {
     slidesRef.current = slides
     dirtyRef.current = true
@@ -24,14 +23,25 @@ export function useAutoSave(deckId) {
       if (!dirtyRef.current) return
       dirtyRef.current = false
       const current = slidesRef.current
-      try {
-        await Promise.all(current.map(slide =>
-          updateSlide(deckId, slide.id, {
-            label: slide.label,
-            elements: slide.elements
-          }).catch(() => { dirtyRef.current = true })
-        ))
-      } catch { dirtyRef.current = true }
+
+      for (const slide of current) {
+        try {
+          await updateSlide(deckId, slide.id, { label: slide.label, elements: slide.elements })
+        } catch (err) {
+          if (err.response?.status === 404) {
+            // Slide doesn't exist on server yet — create it
+            try {
+              const created = await createSlide(deckId, { label: slide.label, elements: slide.elements })
+              // Update local store to use server-assigned ID
+              useSlidesStore.getState().updateSlideElements(created.id, slide.elements)
+            } catch {
+              dirtyRef.current = true
+            }
+          } else {
+            dirtyRef.current = true
+          }
+        }
+      }
     }, INTERVAL)
 
     return () => clearInterval(interval)
