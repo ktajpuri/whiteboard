@@ -7,6 +7,7 @@ import { useHistoryStore } from '../store/historyStore'
 import ShapeElement from './elements/ShapeElement'
 import StrokeElement from './elements/StrokeElement'
 import TextElement from './elements/TextElement'
+import ImageElement from './elements/ImageElement'
 
 const CANVAS_W = 4000
 const CANVAS_H = 3000
@@ -381,6 +382,18 @@ export default function WhiteboardCanvas({ width, height }) {
                 onDragEnd={handleDragEnd}
                 onTransformEnd={handleTransformEnd}
                 onTextChange={(text) => handleTextChange(el.id, text)}
+              />
+            )
+          }
+          if (el.type === 'image') {
+            return (
+              <ImageElement
+                key={el.id}
+                element={el}
+                draggable={isDraggable}
+                onClick={handleElementClick}
+                onDragEnd={handleDragEnd}
+                onTransformEnd={handleTransformEnd}
               />
             )
           }

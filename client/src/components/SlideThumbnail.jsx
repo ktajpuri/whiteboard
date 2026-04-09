@@ -86,6 +86,19 @@ function drawElements(ctx, elements) {
       ctx.stroke()
     }
 
+    if (el.type === 'image' && el.src) {
+      const img = thumbImgCache.get(el.src)
+      if (img) {
+        const nw = el.naturalWidth  ?? img.naturalWidth
+        const nh = el.naturalHeight ?? img.naturalHeight
+        const sx = el.cropX      ?? 0
+        const sy = el.cropY      ?? 0
+        const sw = el.cropWidth  ?? nw
+        const sh = el.cropHeight ?? nh
+        ctx.drawImage(img, sx, sy, sw, sh, el.x, el.y, el.width, el.height)
+      }
+    }
+
     if (el.type === 'text' && el.text) {
       const size  = el.fontSize || 16
       const style = el.fontStyle || 'normal'
@@ -98,21 +111,42 @@ function drawElements(ctx, elements) {
   }
 }
 
+// Module-level image cache for thumbnails
+const thumbImgCache = new Map()
+
+function loadImage(src) {
+  if (thumbImgCache.has(src)) return Promise.resolve(thumbImgCache.get(src))
+  return new Promise((resolve) => {
+    const img = new window.Image()
+    img.onload = () => { thumbImgCache.set(src, img); resolve(img) }
+    img.onerror = () => resolve(null)
+    img.src = src
+  })
+}
+
 export default function SlideThumbnail({ elements }) {
   const canvasRef = useRef(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    ctx.clearRect(0, 0, THUMB_W, THUMB_H)
 
-    if (!elements?.length) return
+    const render = async () => {
+      const ctx = canvas.getContext('2d')
+      ctx.clearRect(0, 0, THUMB_W, THUMB_H)
+      if (!elements?.length) return
 
-    ctx.save()
-    ctx.scale(SCALE, SCALE)
-    drawElements(ctx, elements)
-    ctx.restore()
+      // Pre-load all images
+      const imageEls = elements.filter(el => el.type === 'image' && el.src)
+      await Promise.all(imageEls.map(el => loadImage(el.src)))
+
+      ctx.save()
+      ctx.scale(SCALE, SCALE)
+      drawElements(ctx, elements)
+      ctx.restore()
+    }
+
+    render()
   }, [elements])
 
   return (

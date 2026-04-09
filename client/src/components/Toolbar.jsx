@@ -1,6 +1,9 @@
+import { useRef } from 'react'
+import { v4 as uuidv4 } from 'uuid'
 import { useCanvasStore } from '../store/canvasStore'
 import { useSlidesStore } from '../store/slidesStore'
 import { useHistoryStore } from '../store/historyStore'
+import { readAndResizeImage } from '../utils/imageUtils'
 import ColorPicker from './ColorPicker'
 
 /* ── Brand logo ── */
@@ -38,6 +41,7 @@ const IcFit     = () => <Ic d={<><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><pat
 const IcUpload  = () => <Ic d={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>} />
 const IcDownload= () => <Ic d={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} />
 const IcUser    = () => <Ic d={<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>} />
+const IcImage   = () => <Ic d={<><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>} />
 
 const SHAPE_TOOLS = [
   { id: 'select',   Icon: IcCursor,   title: 'Select (V)'     },
@@ -57,6 +61,8 @@ const DRAW_TOOLS = [
 const SIZES = ['S', 'M', 'L', 'XL']
 
 export default function Toolbar({ onExport, onImport, user, onSignIn, onSignOut }) {
+  const imageFileRef = useRef()
+
   const {
     activeTool, setTool,
     penSize, setPenSize,
@@ -66,6 +72,32 @@ export default function Toolbar({ onExport, onImport, user, onSignIn, onSignOut 
 
   const { getActiveSlide, updateSlideElements, activeSlideId } = useSlidesStore()
   const { undo, redo, canUndo: histCanUndo, canRedo: histCanRedo } = useHistoryStore()
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    try {
+      const { dataURL, naturalWidth, naturalHeight } = await readAndResizeImage(file)
+      const slideId = useSlidesStore.getState().activeSlideId
+      const elements = useSlidesStore.getState().getActiveSlide()?.elements || []
+      const { push: pushHistory } = useHistoryStore.getState()
+      const id = uuidv4()
+      const displayW = Math.min(600, naturalWidth)
+      const displayH = Math.round(naturalHeight * (displayW / naturalWidth))
+      pushHistory(slideId, elements)
+      updateSlideElements(slideId, [...elements, {
+        id, type: 'image', specVersion: '1.0',
+        src: dataURL,
+        x: 200, y: 200,
+        width: displayW, height: displayH,
+        naturalWidth, naturalHeight,
+        rotation: 0,
+      }])
+    } catch (err) {
+      console.error('Image upload failed', err)
+    }
+  }
 
   const slide    = getActiveSlide()
   const elements = slide?.elements || []
@@ -172,6 +204,20 @@ export default function Toolbar({ onExport, onImport, user, onSignIn, onSignOut 
         <button className="tool-btn" onClick={() => setZoom(zoom * 1.25)} title="Zoom in (+)"><IcPlus /></button>
         <button className="tool-btn" onClick={fitToScreen} title="Fit to screen"><IcFit /></button>
       </div>
+
+      <div className="toolbar-divider" />
+
+      {/* Image upload */}
+      <input
+        ref={imageFileRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleImageUpload}
+      />
+      <button className="tb-action-btn" onClick={() => imageFileRef.current?.click()} title="Insert image">
+        <IcImage /> Image
+      </button>
 
       <div className="toolbar-divider" />
 

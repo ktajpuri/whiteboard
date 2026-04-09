@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { useCanvasStore } from '../store/canvasStore'
 import { useSlidesStore } from '../store/slidesStore'
 import { useHistoryStore } from '../store/historyStore'
+import CropModal from './CropModal'
 
 const FONT_SIZES = [
   { label: 'S',  value: 12 },
@@ -10,6 +12,7 @@ const FONT_SIZES = [
 ]
 
 export default function PropertiesPanel() {
+  const [showCrop, setShowCrop] = useState(false)
   const { selectedIds } = useCanvasStore()
   const { getActiveSlide, updateSlideElements, activeSlideId } = useSlidesStore()
   const { push: pushHistory } = useHistoryStore()
@@ -105,6 +108,30 @@ export default function PropertiesPanel() {
           </div>
         )}
 
+        {/* Image controls */}
+        {isSingle && el.type === 'image' && (
+          <>
+            <div className="prop-row">
+              <span className="prop-label">Crop</span>
+              <button className="btn-secondary" style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => setShowCrop(true)}>
+                Edit Crop
+              </button>
+            </div>
+            {(el.cropX != null || el.cropY != null) && (
+              <div className="prop-row">
+                <span className="prop-label"></span>
+                <button
+                  className="btn-secondary"
+                  style={{ padding: '3px 10px', fontSize: 12 }}
+                  onClick={() => update({ cropX: undefined, cropY: undefined, cropWidth: undefined, cropHeight: undefined })}
+                >
+                  Reset Crop
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
         {/* Text controls */}
         {isSingle && el.type === 'text' && (
           <>
@@ -148,6 +175,17 @@ export default function PropertiesPanel() {
           </>
         )}
       </div>
+
+      {showCrop && isSingle && el.type === 'image' && (
+        <CropModal
+          element={el}
+          onApply={(cropData) => {
+            update(cropData)
+            setShowCrop(false)
+          }}
+          onClose={() => setShowCrop(false)}
+        />
+      )}
     </div>
   )
 }
