@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { useSlidesStore } from '../store/slidesStore'
+import SlideThumbnail from './SlideThumbnail'
 
 export default function SlidePanel() {
   const {
@@ -60,7 +61,10 @@ export default function SlidePanel() {
             title="Double-click to rename · Right-click for options"
           >
             <div className="thumb-preview">
-              <span className="thumb-number">{idx + 1}</span>
+              {slide.elements.length > 0
+                ? <SlideThumbnail elements={slide.elements} />
+                : <span className="thumb-number">{idx + 1}</span>
+              }
             </div>
             <div className="thumb-meta">
               <span className="thumb-index">{idx + 1}</span>
