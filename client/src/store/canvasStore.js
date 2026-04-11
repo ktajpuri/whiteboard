@@ -14,6 +14,8 @@ export const useCanvasStore = create((set, get) => ({
   penSize: 'M',
   eraserSize: 'M',
   spraySize: 'M',
+  selectedStamp: '😀',
+  stampSize: 'M',
   activeColor: '#000000',
   recentColors: [],
   aspectLock: false,
@@ -29,6 +31,8 @@ export const useCanvasStore = create((set, get) => ({
   setPenSize: (penSize) => set({ penSize }),
   setEraserSize: (eraserSize) => set({ eraserSize }),
   setSpraySize: (spraySize) => set({ spraySize }),
+  setSelectedStamp: (selectedStamp) => set({ selectedStamp }),
+  setStampSize: (stampSize) => set({ stampSize }),
   toggleAspectLock: () => set(s => ({ aspectLock: !s.aspectLock })),
 
   setActiveColor(color) {

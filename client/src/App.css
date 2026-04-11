@@ -675,3 +675,54 @@ button.secondary:hover { background: var(--n-100); }
 }
 
 .radio-label { font-size: 13px; color: var(--n-700); display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 500; }
+
+/* ── Stamp Picker ── */
+.stamp-picker {
+  display: flex; align-items: center;
+}
+.stamp-chip-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 8px; border-radius: var(--r-sm);
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.1);
+  transition: background var(--transition), border-color var(--transition);
+  cursor: pointer;
+}
+.stamp-chip-btn:hover { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.18); }
+.stamp-chip-emoji { font-size: 20px; line-height: 1; display: block; }
+
+.stamp-panel {
+  background: #fff;
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-lg);
+  padding: 12px;
+  box-shadow: var(--sh-xl);
+  width: 252px;
+}
+.stamp-panel-tabs {
+  display: flex; gap: 2px;
+  border-bottom: 1px solid var(--n-100);
+  padding-bottom: 8px; margin-bottom: 8px;
+}
+.stamp-tab {
+  flex: 1; height: 30px; border-radius: var(--r-sm);
+  font-size: 15px; display: flex; align-items: center; justify-content: center;
+  transition: background var(--transition);
+}
+.stamp-tab:hover { background: var(--n-100); }
+.stamp-tab.active { background: var(--brand-bg); box-shadow: 0 0 0 1.5px var(--brand-border); }
+.stamp-panel-label {
+  font-size: 10px; font-weight: 700; color: var(--n-400);
+  text-transform: uppercase; letter-spacing: .7px;
+  margin-bottom: 6px;
+}
+.stamp-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px;
+}
+.stamp-btn {
+  height: 36px; border-radius: var(--r-sm);
+  font-size: 20px; display: flex; align-items: center; justify-content: center;
+  transition: background var(--transition), transform .1s;
+}
+.stamp-btn:hover { background: var(--n-100); transform: scale(1.25); z-index: 1; }
+.stamp-btn.active { background: var(--brand-bg); box-shadow: 0 0 0 2px var(--brand); }

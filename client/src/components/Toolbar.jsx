@@ -5,6 +5,7 @@ import { useSlidesStore } from '../store/slidesStore'
 import { useHistoryStore } from '../store/historyStore'
 import { readAndResizeImage } from '../utils/imageUtils'
 import ColorPicker from './ColorPicker'
+import StampPicker from './StampPicker'
 
 /* ── Brand logo ── */
 const Logo = () => (
@@ -33,6 +34,13 @@ const IcPen     = () => <Ic d={<><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 2
 const IcText    = () => <Ic d={<><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></>} />
 const IcEraser  = () => <Ic d={<><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></>} />
 const IcBucket  = () => <Ic d={<><path d="m19 11-8-8-8.5 8.5a5.5 5.5 0 0 0 7.78 7.78L19 11Z"/><path d="m19 11 2 2a2.83 2.83 0 0 1 0 4h0a2.83 2.83 0 0 1-4 0l-1-1"/><path d="M3 21h12"/></>} />
+const IcStamp   = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2a5 5 0 0 1 5 5c0 2.5-1.5 4.5-3.5 5.4V14h2a2 2 0 0 1 2 2v1H6.5v-1a2 2 0 0 1 2-2h2v-1.6C8.5 11.5 7 9.5 7 7a5 5 0 0 1 5-5z"/>
+    <rect x="4" y="17" width="16" height="4" rx="1"/>
+  </svg>
+)
 const IcSpray   = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -71,6 +79,7 @@ const SHAPE_TOOLS = [
 const DRAW_TOOLS = [
   { id: 'pen',    Icon: IcPen,    title: 'Pen (P)'    },
   { id: 'spray',  Icon: IcSpray,  title: 'Spray (A)'  },
+  { id: 'stamp',  Icon: IcStamp,  title: 'Stamp'      },
   { id: 'text',   Icon: IcText,   title: 'Text (T)'   },
   { id: 'eraser', Icon: IcEraser, title: 'Eraser'     },
   { id: 'bucket', Icon: IcBucket, title: 'Fill color' },
@@ -87,6 +96,7 @@ export default function Toolbar({ onExport, onImport, user, onSignIn, onSignOut 
     penSize, setPenSize,
     eraserSize, setEraserSize,
     spraySize, setSpraySize,
+    stampSize, setStampSize,
     zoom, setZoom, fitToScreen,
   } = useCanvasStore()
 
@@ -135,6 +145,7 @@ export default function Toolbar({ onExport, onImport, user, onSignIn, onSignOut 
 
   const showSizes  = activeTool === 'pen' || activeTool === 'eraser'
   const showSpray  = activeTool === 'spray'
+  const showStamp  = activeTool === 'stamp'
   const activeSize = activeTool === 'pen' ? penSize : eraserSize
   const setSize    = activeTool === 'pen' ? setPenSize : setEraserSize
 
@@ -210,6 +221,25 @@ export default function Toolbar({ onExport, onImport, user, onSignIn, onSignOut 
                 className={`size-btn ${spraySize === s ? 'active' : ''}`}
                 onClick={() => setSpraySize(s)}
                 title={`Spray size ${s}`}
+              >{s}</button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Stamp picker + size */}
+      {showStamp && (
+        <>
+          <div className="toolbar-divider" />
+          <StampPicker />
+          <div className="toolbar-divider" />
+          <div className="size-picker">
+            {SPRAY_SIZES.map(s => (
+              <button
+                key={s}
+                className={`size-btn ${stampSize === s ? 'active' : ''}`}
+                onClick={() => setStampSize(s)}
+                title={`Stamp size ${s}`}
               >{s}</button>
             ))}
           </div>

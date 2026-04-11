@@ -7,6 +7,7 @@ import { useHistoryStore } from '../store/historyStore'
 import ShapeElement from './elements/ShapeElement'
 import StrokeElement from './elements/StrokeElement'
 import SprayElement from './elements/SprayElement'
+import StampElement from './elements/StampElement'
 import TextElement from './elements/TextElement'
 import ImageElement from './elements/ImageElement'
 
@@ -18,6 +19,7 @@ const SPRAY_CONFIGS = {
   M: { radius: 45, dotSize: 2,   density: 9 },
   L: { radius: 90, dotSize: 3,   density: 12 },
 }
+const STAMP_SIZES = { S: 48, M: 80, L: 128 }
 const SHAPE_TOOLS = ['rect', 'ellipse', 'triangle', 'hexagon']
 
 export default function WhiteboardCanvas({ width, height }) {
@@ -47,6 +49,11 @@ export default function WhiteboardCanvas({ width, height }) {
     zoom, panX, panY, selectedIds, editingTextId,
     setZoom, setPan, setSelected, clearSelection, addToSelection, setEditingText
   } = useCanvasStore()
+  // Read stamp state fresh at event time (avoid stale closures)
+  const getStampState = () => {
+    const s = useCanvasStore.getState()
+    return { selectedStamp: s.selectedStamp, stampSize: s.stampSize }
+  }
 
   // Keep refs in sync with React state
   useEffect(() => { toolRef.current = activeTool }, [activeTool])
@@ -215,6 +222,20 @@ export default function WhiteboardCanvas({ width, height }) {
       return
     }
 
+    if (tool === 'stamp') {
+      const { selectedStamp, stampSize } = getStampState()
+      const size = STAMP_SIZES[stampSize] || 80
+      const id = uuidv4()
+      commit([...els, {
+        id, type: 'stamp', specVersion: '1.0',
+        content: selectedStamp,
+        x: pos.x - size / 2,
+        y: pos.y - size / 2,
+        size,
+      }])
+      return
+    }
+
     if (tool === 'eraser') {
       const hit = stage.getIntersection(stage.getPointerPosition())
       if (hit?.id() && hit.name() !== 'background') {
@@ -376,6 +397,10 @@ export default function WhiteboardCanvas({ width, height }) {
     const els = getElements()
     commit(els.map(el => {
       if (el.id !== id) return el
+      if (el.type === 'stamp') {
+        const newSize = Math.max(16, Math.round((el.size || 80) * Math.max(scaleX, scaleY)))
+        return { ...el, x: node.x(), y: node.y(), size: newSize }
+      }
       const newWidth = Math.max(5, (el.width || 0) * scaleX)
       const newHeight = Math.max(5, (el.height || 0) * scaleY)
       // Ellipse: node.x/y is center, convert to top-left
@@ -406,7 +431,7 @@ export default function WhiteboardCanvas({ width, height }) {
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      style={{ cursor: (activeTool === 'pen' || activeTool === 'spray') ? 'crosshair' : activeTool === 'eraser' ? 'cell' : 'default' }}
+      style={{ cursor: (activeTool === 'pen' || activeTool === 'spray') ? 'crosshair' : activeTool === 'eraser' ? 'cell' : activeTool === 'stamp' ? 'copy' : 'default' }}
     >
       <Layer>
         <Rect
@@ -439,6 +464,18 @@ export default function WhiteboardCanvas({ width, height }) {
                 draggable={isDraggable}
                 onClick={handleElementClick}
                 onDragEnd={handleDragEnd}
+              />
+            )
+          }
+          if (el.type === 'stamp') {
+            return (
+              <StampElement
+                key={el.id}
+                element={el}
+                draggable={isDraggable}
+                onClick={handleElementClick}
+                onDragEnd={handleDragEnd}
+                onTransformEnd={handleTransformEnd}
               />
             )
           }
