@@ -6,12 +6,18 @@ import { useSlidesStore } from '../store/slidesStore'
 import { useHistoryStore } from '../store/historyStore'
 import ShapeElement from './elements/ShapeElement'
 import StrokeElement from './elements/StrokeElement'
+import SprayElement from './elements/SprayElement'
 import TextElement from './elements/TextElement'
 import ImageElement from './elements/ImageElement'
 
 const CANVAS_W = 4000
 const CANVAS_H = 3000
 const PEN_SIZES = { S: 2, M: 4, L: 8, XL: 16 }
+const SPRAY_CONFIGS = {
+  S: { radius: 18, dotSize: 1.5, density: 6 },
+  M: { radius: 45, dotSize: 2,   density: 9 },
+  L: { radius: 90, dotSize: 3,   density: 12 },
+}
 const SHAPE_TOOLS = ['rect', 'ellipse', 'triangle', 'hexagon']
 
 export default function WhiteboardCanvas({ width, height }) {
@@ -26,7 +32,10 @@ export default function WhiteboardCanvas({ width, height }) {
   const toolRef = useRef('select')
   const penSizeRef = useRef('M')
   const eraserSizeRef = useRef('M')
+  const spraySizeRef = useRef('M')
   const activeColorRef = useRef('#000000')
+  const sprayInterval = useRef(null)
+  const currentSprayPos = useRef({ x: 0, y: 0 })
   const zoomRef = useRef(1)
   const panXRef = useRef(0)
   const panYRef = useRef(0)
@@ -34,7 +43,7 @@ export default function WhiteboardCanvas({ width, height }) {
   const editingTextIdRef = useRef(null)
 
   const {
-    activeTool, penSize, eraserSize, activeColor,
+    activeTool, penSize, eraserSize, spraySize, activeColor,
     zoom, panX, panY, selectedIds, editingTextId,
     setZoom, setPan, setSelected, clearSelection, addToSelection, setEditingText
   } = useCanvasStore()
@@ -43,6 +52,7 @@ export default function WhiteboardCanvas({ width, height }) {
   useEffect(() => { toolRef.current = activeTool }, [activeTool])
   useEffect(() => { penSizeRef.current = penSize }, [penSize])
   useEffect(() => { eraserSizeRef.current = eraserSize }, [eraserSize])
+  useEffect(() => { spraySizeRef.current = spraySize }, [spraySize])
   useEffect(() => { activeColorRef.current = activeColor }, [activeColor])
   useEffect(() => { zoomRef.current = zoom }, [zoom])
   useEffect(() => { panXRef.current = panX }, [panX])
@@ -176,6 +186,35 @@ export default function WhiteboardCanvas({ width, height }) {
       return
     }
 
+    if (tool === 'spray') {
+      const id = uuidv4()
+      drawingId.current = id
+      currentSprayPos.current = pos
+      const cfg = SPRAY_CONFIGS[spraySizeRef.current] || SPRAY_CONFIGS.M
+      updateLive([...els, {
+        id, type: 'spray', specVersion: '1.0',
+        dots: [],
+        color: activeColorRef.current,
+        dotSize: cfg.dotSize,
+        sprayRadius: cfg.radius,
+      }])
+      const addDots = () => {
+        const { x, y } = currentSprayPos.current
+        const newDots = Array.from({ length: cfg.density }, () => {
+          const angle = Math.random() * Math.PI * 2
+          const dist  = Math.sqrt(Math.random()) * cfg.radius
+          return { x: x + Math.cos(angle) * dist, y: y + Math.sin(angle) * dist }
+        })
+        const current = getElements()
+        updateLive(current.map(el =>
+          el.id === id ? { ...el, dots: [...el.dots, ...newDots] } : el
+        ))
+      }
+      addDots()
+      sprayInterval.current = setInterval(addDots, 30)
+      return
+    }
+
     if (tool === 'eraser') {
       const hit = stage.getIntersection(stage.getPointerPosition())
       if (hit?.id() && hit.name() !== 'background') {
@@ -237,6 +276,11 @@ export default function WhiteboardCanvas({ width, height }) {
       return
     }
 
+    if (tool === 'spray') {
+      currentSprayPos.current = pos
+      return
+    }
+
     if (tool === 'eraser') {
       const hit = stageRef.current.getIntersection(stageRef.current.getPointerPosition())
       if (hit?.id() && hit.name() !== 'background') {
@@ -269,6 +313,22 @@ export default function WhiteboardCanvas({ width, height }) {
     if (tool === 'pen' && drawingId.current) {
       const stroke = els.find(el => el.id === drawingId.current)
       if (stroke) commit(els) // finalize current state as history checkpoint
+      drawingId.current = null
+      return
+    }
+
+    if (tool === 'spray' && drawingId.current) {
+      if (sprayInterval.current) {
+        clearInterval(sprayInterval.current)
+        sprayInterval.current = null
+      }
+      const finalEls = getElements()
+      const spray = finalEls.find(el => el.id === drawingId.current)
+      if (spray && spray.dots.length > 0) {
+        commit(finalEls)
+      } else if (spray) {
+        updateLive(finalEls.filter(el => el.id !== drawingId.current))
+      }
       drawingId.current = null
       return
     }
@@ -346,7 +406,7 @@ export default function WhiteboardCanvas({ width, height }) {
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      style={{ cursor: activeTool === 'pen' ? 'crosshair' : activeTool === 'eraser' ? 'cell' : 'default' }}
+      style={{ cursor: (activeTool === 'pen' || activeTool === 'spray') ? 'crosshair' : activeTool === 'eraser' ? 'cell' : 'default' }}
     >
       <Layer>
         <Rect
@@ -363,6 +423,17 @@ export default function WhiteboardCanvas({ width, height }) {
           if (el.type === 'stroke') {
             return (
               <StrokeElement
+                key={el.id}
+                element={el}
+                draggable={isDraggable}
+                onClick={handleElementClick}
+                onDragEnd={handleDragEnd}
+              />
+            )
+          }
+          if (el.type === 'spray') {
+            return (
+              <SprayElement
                 key={el.id}
                 element={el}
                 draggable={isDraggable}

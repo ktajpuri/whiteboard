@@ -13,6 +13,7 @@ export const useCanvasStore = create((set, get) => ({
   activeTool: 'select',
   penSize: 'M',
   eraserSize: 'M',
+  spraySize: 'M',
   activeColor: '#000000',
   recentColors: [],
   aspectLock: false,
@@ -27,6 +28,7 @@ export const useCanvasStore = create((set, get) => ({
   setTool: (tool) => set({ activeTool: tool, selectedIds: [], editingTextId: null }),
   setPenSize: (penSize) => set({ penSize }),
   setEraserSize: (eraserSize) => set({ eraserSize }),
+  setSpraySize: (spraySize) => set({ spraySize }),
   toggleAspectLock: () => set(s => ({ aspectLock: !s.aspectLock })),
 
   setActiveColor(color) {

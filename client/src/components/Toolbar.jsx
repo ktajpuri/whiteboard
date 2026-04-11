@@ -33,6 +33,23 @@ const IcPen     = () => <Ic d={<><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 2
 const IcText    = () => <Ic d={<><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></>} />
 const IcEraser  = () => <Ic d={<><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></>} />
 const IcBucket  = () => <Ic d={<><path d="m19 11-8-8-8.5 8.5a5.5 5.5 0 0 0 7.78 7.78L19 11Z"/><path d="m19 11 2 2a2.83 2.83 0 0 1 0 4h0a2.83 2.83 0 0 1-4 0l-1-1"/><path d="M3 21h12"/></>} />
+const IcSpray   = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="11" width="8" height="10" rx="1.5"/>
+    <path d="M11 15h2"/>
+    <path d="M13 13v4"/>
+    <path d="M7 11V8"/>
+    <path d="M5 8h4"/>
+    <circle cx="16" cy="6" r="1" fill="currentColor" stroke="none"/>
+    <circle cx="19" cy="5" r="1" fill="currentColor" stroke="none"/>
+    <circle cx="20" cy="8" r="1" fill="currentColor" stroke="none"/>
+    <circle cx="18" cy="10" r="1" fill="currentColor" stroke="none"/>
+    <circle cx="15" cy="9" r="1" fill="currentColor" stroke="none"/>
+    <circle cx="21" cy="11" r="1" fill="currentColor" stroke="none"/>
+    <circle cx="17" cy="13" r="1" fill="currentColor" stroke="none"/>
+  </svg>
+)
 const IcUndo    = () => <Ic d={<><path d="M3 7v6h6"/><path d="M3 13A9 9 0 1 0 6 6.3"/></>} />
 const IcRedo    = () => <Ic d={<><path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 1-3-6.7"/></>} />
 const IcMinus   = () => <Ic d={<line x1="5" y1="12" x2="19" y2="12"/>} />
@@ -53,12 +70,14 @@ const SHAPE_TOOLS = [
 
 const DRAW_TOOLS = [
   { id: 'pen',    Icon: IcPen,    title: 'Pen (P)'    },
+  { id: 'spray',  Icon: IcSpray,  title: 'Spray (A)'  },
   { id: 'text',   Icon: IcText,   title: 'Text (T)'   },
   { id: 'eraser', Icon: IcEraser, title: 'Eraser'     },
   { id: 'bucket', Icon: IcBucket, title: 'Fill color' },
 ]
 
 const SIZES = ['S', 'M', 'L', 'XL']
+const SPRAY_SIZES = ['S', 'M', 'L']
 
 export default function Toolbar({ onExport, onImport, user, onSignIn, onSignOut }) {
   const imageFileRef = useRef()
@@ -67,6 +86,7 @@ export default function Toolbar({ onExport, onImport, user, onSignIn, onSignOut 
     activeTool, setTool,
     penSize, setPenSize,
     eraserSize, setEraserSize,
+    spraySize, setSpraySize,
     zoom, setZoom, fitToScreen,
   } = useCanvasStore()
 
@@ -113,7 +133,8 @@ export default function Toolbar({ onExport, onImport, user, onSignIn, onSignOut 
     if (next !== null) updateSlideElements(activeSlideId, next)
   }
 
-  const showSizes = activeTool === 'pen' || activeTool === 'eraser'
+  const showSizes  = activeTool === 'pen' || activeTool === 'eraser'
+  const showSpray  = activeTool === 'spray'
   const activeSize = activeTool === 'pen' ? penSize : eraserSize
   const setSize    = activeTool === 'pen' ? setPenSize : setEraserSize
 
@@ -172,6 +193,23 @@ export default function Toolbar({ onExport, onImport, user, onSignIn, onSignOut 
                 className={`size-btn ${activeSize === s ? 'active' : ''}`}
                 onClick={() => setSize(s)}
                 title={`Size ${s}`}
+              >{s}</button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Spray size picker */}
+      {showSpray && (
+        <>
+          <div className="toolbar-divider" />
+          <div className="size-picker">
+            {SPRAY_SIZES.map(s => (
+              <button
+                key={s}
+                className={`size-btn ${spraySize === s ? 'active' : ''}`}
+                onClick={() => setSpraySize(s)}
+                title={`Spray size ${s}`}
               >{s}</button>
             ))}
           </div>
